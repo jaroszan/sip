@@ -51,14 +51,7 @@ func listen(connection *net.UDPConn, quit chan struct{}) {
 
 func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
-	addr := net.UDPAddr{
-		Port: 5060,
-		IP:   net.IP{127, 0, 0, 1},
-	}
-	connection, err := net.ListenUDP("udp", &addr)
-	if err != nil {
-		panic(err)
-	}
+	connection := sip.Start("127.0.0.1:5060")
 	quit := make(chan struct{})
 	for i := 0; i < runtime.NumCPU(); i++ {
 		fmt.Println(runtime.NumCPU(), " listener(s) started as determined by runtime.NumCPU()")
