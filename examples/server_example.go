@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"runtime"
 	"strings"
 	"time"
 	"github.com/jaroszan/sip"
@@ -53,9 +52,6 @@ func main() {
 	rand.Seed(time.Now().UTC().UnixNano())
 	connection := sip.Start("127.0.0.1:5060")
 	quit := make(chan struct{})
-	for i := 0; i < runtime.NumCPU(); i++ {
-		fmt.Println(runtime.NumCPU(), " listener(s) started as determined by runtime.NumCPU()")
-		go listen(connection, quit)
-	}
+	go listen(connection, quit)
 	<-quit
 }

@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"math/rand"
 	"net"
 	"os"
 	"strings"
@@ -19,22 +18,6 @@ const (
 	REQUEST  = "request"
 	RESPONSE = "response"
 )
-
-// Generating random strings for tags/call ids
-func GenerateRandom(charsToDouble int) string {
-	var buf bytes.Buffer
-	for i := 0; i < charsToDouble; i++ {
-		buf.WriteByte(byte(RandInt(65, 90)))
-		buf.WriteByte(byte(RandInt(97, 122)))
-	}
-
-	return string(buf.Bytes())
-}
-
-// Generating random number between two given numbers
-func RandInt(min int, max int) int {
-	return min + rand.Intn(max-min)
-}
 
 
 // Prepare a response to incoming request
