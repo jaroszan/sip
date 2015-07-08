@@ -5,11 +5,7 @@
 package sip
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
-	"net"
-	"os"
 	"strings"
 )
 
@@ -29,27 +25,17 @@ func PrepareResponse(sipHeaders map[string]string, code string, reasonPhrase str
 	response += "From: " + sipHeaders["From"] + "\r\n"
 	response += "Call-ID: " + sipHeaders["Call-ID"] + "\r\n"
 	response += "CSeq: " + sipHeaders["CSeq"] + "\r\n"
-	response += "Max-Forwards: " + sipHeaders["Max-Forwards"] + "\r\n"
+	response += "Max-Forwards: " + sipHeaders["Max-Forwards"] + "\r\n" + "\r\n"
 	return response
 }
 
 // Adding header to response, should be called after prepareResponse to add non-mandatory headers
 func AddHeader(responseHeaders string, newHeaderName string, newHeaderValue string) string {
-	responseHeaders += newHeaderName + ": " + newHeaderValue + "\r\n"
+	responseHeaders = strings.TrimSpace(responseHeaders)
+	responseHeaders += "\r\n" + newHeaderName + ": " + newHeaderValue + "\r\n" + "\r\n"
 	return responseHeaders
 }
 
-// Finalizing response and putting it on the wire
-func SendResponse(responseHeaders string, addr *net.UDPAddr, connection *net.UDPConn) {
-	var payload bytes.Buffer
-	responseHeaders += "\r\n"
-	payload.WriteString(responseHeaders)
-	_, err := connection.WriteToUDP(payload.Bytes(), addr)
-	if err != nil {
-		fmt.Println("Error: ", err)
-		os.Exit(0)
-	}
-}
 
 // Parse first line to determine whether incoming message is a response or a request
 func ParseFirstLine(ruriOrStatusLine string) (string, string, error) {

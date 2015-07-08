@@ -8,6 +8,13 @@ import (
 	"net"
 )
 
+type Packet struct {
+	addr *net.UDPAddr
+	data []byte
+}
+
+const UDP_PACKET_SIZE = 2048
+
 func Start(address string) (*net.UDPConn) {
 	addr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
@@ -18,8 +25,6 @@ func Start(address string) (*net.UDPConn) {
 	if err != nil {
 		panic(err)
 	}
-	return connection
+	return connection	
 }
 
-	
-	
