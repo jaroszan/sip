@@ -5,8 +5,8 @@
 package sip
 
 import (
-	"math/rand"
 	"bytes"
+	"math/rand"
 )
 
 // Generating random strings for tags/call ids

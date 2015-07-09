@@ -15,7 +15,7 @@ type Packet struct {
 
 const UDP_PACKET_SIZE = 2048
 
-func Start(address string) (*net.UDPConn) {
+func Start(address string) *net.UDPConn {
 	addr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
 		panic(err)
@@ -25,6 +25,5 @@ func Start(address string) (*net.UDPConn) {
 	if err != nil {
 		panic(err)
 	}
-	return connection	
+	return connection
 }
-

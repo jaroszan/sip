@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"github.com/jaroszan/sip"
+	"log"
 	"net"
 	"strings"
 	"sync"
-	"log"
 )
 
 type Packet struct {
