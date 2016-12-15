@@ -1,4 +1,4 @@
-// Copyright 2015 go-sip authors. All rights reserved.
+// Copyright 2015 sip authors. All rights reserved.
 // Use of this source code is governed by a MIT-style license that can be
 // found in the LICENSE file.
 
@@ -8,13 +8,16 @@ import (
 	"net"
 )
 
+// Packet stores UDP connection data and payload
 type Packet struct {
 	addr *net.UDPAddr
 	data []byte
 }
 
-const UDP_PACKET_SIZE = 2048
+// MaxPayload sets the largest accepted UDP packet
+const MaxPayload = 2048
 
+// Start prepares and returns UDP connection
 func Start(address string) *net.UDPConn {
 	addr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
