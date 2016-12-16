@@ -7,7 +7,12 @@ package sip
 import (
 	"bytes"
 	"math/rand"
+	"time"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 const branchMagicCookie = "z9hG4bK"
 

@@ -18,7 +18,7 @@ type Packet struct {
 const MaxPayload = 2048
 
 // Start prepares and returns UDP connection
-func Start(address string) *net.UDPConn {
+func Start(address string) (*net.UDPConn, *net.UDPAddr) {
 	addr, err := net.ResolveUDPAddr("udp", address)
 	if err != nil {
 		panic(err)
@@ -28,5 +28,5 @@ func Start(address string) *net.UDPConn {
 	if err != nil {
 		panic(err)
 	}
-	return connection
+	return connection, addr
 }

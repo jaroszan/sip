@@ -61,3 +61,18 @@ func ParseHeaders(headers []string) map[string]string {
 	}
 	return sipHeaders
 }
+
+//MakeRequest prepares request
+func MakeRequest(method string) string {
+	var request string
+	request += "INVITE " + "alice@localhost:5060 " + "SIP/2.0" + "\r\n"
+	request += "Via: " + "SIP/2.0/UDP" + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
+	request += "To: alice@localhost:5060;tag=" + GenerateRandom(4) + "\r\n"
+	request += "From: bob@localhost:5160;tag=" + GenerateRandom(4) + "\r\n"
+	request += "Call-ID: " + GenerateRandom(4) + "\r\n"
+	request += "CSeq: INVITE 1" + "\r\n"
+	request += "Max-Forwards: 70" + "\r\n"
+	request += "Contact: bob@localhost:5160" + "\r\n" + "\r\n"
+
+	return request
+}
