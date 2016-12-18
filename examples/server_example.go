@@ -22,44 +22,50 @@ const udpPacketSize = 2048
 func handleIncomingPacket(inbound chan Packet, outbound chan Packet, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for packet := range inbound {
-		payload := string(packet.data)
-		lines := strings.Split(payload, "\n")
-		mType, mValue, err := sip.ParseFirstLine(lines[0])
+		go func() {
+			payload := string(packet.data)
+			lines := strings.Split(payload, "\n")
+			mType, mValue, err := sip.ParseFirstLine(lines[0])
 
-		if err != nil {
-			fmt.Println(err)
-		}
-
-		if mType == sip.REQUEST {
-			sipHeaders := sip.ParseHeaders(lines[1:])
-			if mValue == "INVITE" {
-				outboundTrying := sip.PrepareResponse(sipHeaders, "100", "Trying")
-				outboundOK := sip.PrepareResponse(sipHeaders, "200", "OK")
-				outboundOK = sip.AddHeader(outboundOK, "Contact", "sip:bob@localhost:5060")
-				outbound <- Packet{packet.addr, []byte(outboundTrying)}
-				outbound <- Packet{packet.addr, []byte(outboundOK)}
-			} else if mValue == "BYE" {
-				outboundOK := sip.PrepareResponse(sipHeaders, "200", "OK")
-				outbound <- Packet{packet.addr, []byte(outboundOK)}
-			} else {
-				log.Println(mValue + " received")
+			if err != nil {
+				fmt.Println(err)
 			}
-		} else if mType == sip.RESPONSE {
-			if mValue == "200" {
-				log.Println("200 OK received")
-				time.Sleep(time.Second * 1)
+
+			if mType == sip.REQUEST {
 				sipHeaders := sip.ParseHeaders(lines[1:])
-				ackRequest := sip.MakeSubsequentRequest("ACK", "1", sipHeaders)
-				outbound <- Packet{packet.addr, []byte(ackRequest)}
-				time.Sleep(time.Second * 1)
-				byeRequest := sip.MakeSubsequentRequest("BYE", "2", sipHeaders)
-				outbound <- Packet{packet.addr, []byte(byeRequest)}
-			} else if mValue < "200" {
-				log.Println("Provisional response received: " + mValue)
-			} else {
-				log.Println("Response received: " + mValue)
+				if mValue == "INVITE" {
+					outboundTrying := sip.PrepareResponse(sipHeaders, 100, "Trying")
+					outbound180 := sip.PrepareResponse(sipHeaders, 180, "Ringing")
+					outbound180 = sip.AddHeader(outbound180, "Contact", "sip:bob@localhost:5060")
+					outboundOK := sip.PrepareResponse(sipHeaders, 200, "OK")
+					outboundOK = sip.AddHeader(outboundOK, "Contact", "sip:alice@localhost:5060")
+					outbound <- Packet{packet.addr, []byte(outboundTrying)}
+					outbound <- Packet{packet.addr, []byte(outbound180)}
+					outbound <- Packet{packet.addr, []byte(outboundOK)}
+				} else if mValue == "BYE" {
+					outboundOK := sip.PrepareResponse(sipHeaders, 200, "OK")
+					outbound <- Packet{packet.addr, []byte(outboundOK)}
+				} else {
+					log.Println(mValue + " received")
+				}
+			} else if mType == sip.RESPONSE {
+				if mValue == "200" {
+					log.Println("200 OK received")
+					sipHeaders := sip.ParseHeaders(lines[1:])
+					if sipHeaders["cseq"] == "1 INVITE" {
+						ackRequest := sip.MakeSubsequentRequest("ACK", "1", sipHeaders)
+						outbound <- Packet{packet.addr, []byte(ackRequest)}
+						byeRequest := sip.MakeSubsequentRequest("BYE", "2", sipHeaders)
+						time.Sleep(time.Second * 2)
+						outbound <- Packet{packet.addr, []byte(byeRequest)}
+					}
+				} else if mValue < "200" {
+					log.Println("Provisional response received: " + mValue)
+				} else {
+					log.Println("Response received: " + mValue)
+				}
 			}
-		}
+		}()
 	}
 }
 
@@ -89,7 +95,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	ticker := time.NewTicker(time.Millisecond * 900)
+	ticker := time.NewTicker(time.Millisecond * 50)
 	go func() {
 		for _ = range ticker.C {
 			// Prepare INVITE
@@ -97,7 +103,7 @@ func main() {
 			outbound <- Packet{remotePeerAddr, []byte(newRequest)}
 		}
 	}()
-	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second * 90)
 	ticker.Stop()
 	wg.Wait()
 

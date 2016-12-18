@@ -6,6 +6,7 @@ package sip
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 )
 
@@ -16,12 +17,28 @@ const (
 	RESPONSE = "response"
 )
 
+var existingTags map[string]string
+
+func init() {
+	existingTags = make(map[string]string)
+}
+
 // PrepareResponse builds basic structure for a response to an incoming request
-func PrepareResponse(sipHeaders map[string]string, code string, reasonPhrase string) string {
+func PrepareResponse(sipHeaders map[string]string, code int, reasonPhrase string) string {
+	if code > 100 {
+		if _, ok := existingTags[sipHeaders["call-id"]]; !ok {
+			existingTags[sipHeaders["call-id"]] = sipHeaders["to"] + ";tag=" + GenerateRandom(4)
+		}
+	}
 	var response string
-	response += "SIP/2.0 " + code + " " + reasonPhrase + "\r\n"
+	response += "SIP/2.0 " + strconv.Itoa(code) + " " + reasonPhrase + "\r\n"
 	response += "Via: " + sipHeaders["via"] + "\r\n"
-	response += "To: " + sipHeaders["to"] + "\r\n"
+	if code == 100 {
+		response += "To: " + sipHeaders["to"] + "\r\n"
+	} else {
+		response += "To: " + existingTags[sipHeaders["call-id"]] + "\r\n"
+		//response += "Contact: " + "sip:bob@localhost:5060" + "\r\n"
+	}
 	response += "From: " + sipHeaders["from"] + "\r\n"
 	response += "Call-ID: " + sipHeaders["call-id"] + "\r\n"
 	response += "CSeq: " + sipHeaders["cseq"] + "\r\n"
@@ -79,12 +96,13 @@ func MakeRequest(method string, cseq string) string {
 func MakeSubsequentRequest(method string, cseq string, sipHeaders map[string]string) string {
 	var request string
 	request += method + " sip:alice@localhost:5060 " + "SIP/2.0" + "\r\n"
-	request += "Via: " + sipHeaders["via"] + "\r\n"
+	request += "Via: " + "SIP/2.0/UDP " + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
 	request += "To: " + sipHeaders["to"] + "\r\n"
 	request += "From: " + sipHeaders["from"] + "\r\n"
 	request += "Call-ID: " + sipHeaders["call-id"] + "\r\n"
 	request += "CSeq: " + cseq + " " + method + "\r\n"
 	request += "Max-Forwards: 70" + "\r\n"
-	request += "Contact: sip:bob@localhost:5160" + "\r\n" + "\r\n"
+	request += "Content-Length: 0" + "\r\n" + "\r\n"
+	//request += "Contact: sip:bob@localhost:5160" + "\r\n" + "\r\n"
 	return request
 }
