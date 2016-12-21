@@ -27,7 +27,7 @@ func init() {
 func PrepareResponse(sipHeaders map[string]string, code int, reasonPhrase string) string {
 	if code > 100 {
 		if _, ok := existingTags[sipHeaders["call-id"]]; !ok {
-			existingTags[sipHeaders["call-id"]] = sipHeaders["to"] + ";tag=" + GenerateRandom(4)
+			existingTags[sipHeaders["call-id"]] = sipHeaders["to"] + ";tag=" + GenerateTag()
 		}
 	}
 	var response string
@@ -83,12 +83,13 @@ func ParseHeaders(headers []string) map[string]string {
 func MakeRequest(method string, cseq string) string {
 	var request string
 	request += method + " sip:alice@localhost:5060 " + "SIP/2.0" + "\r\n"
-	request += "Via: " + "SIP/2.0/UDP " + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
-	request += "To: sip:alice@localhost:5060;tag=" + GenerateRandom(4) + "\r\n"
-	request += "From: sip:bob@localhost:5160;tag=" + GenerateRandom(4) + "\r\n"
-	request += "Call-ID: " + GenerateRandom(4) + "\r\n"
+	request += "Via: " + "SIP/2.0/TCP " + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
+	request += "To: sip:alice@localhost:5060;tag=" + GenerateTag() + "\r\n"
+	request += "From: sip:bob@localhost:5160;tag=" + GenerateTag() + "\r\n"
+	request += "Call-ID: " + GenerateCallID() + "\r\n"
 	request += "CSeq: " + cseq + " " + method + "\r\n"
 	request += "Max-Forwards: 70" + "\r\n"
+	request += "Content-Length: 0" + "\r\n"
 	request += "Contact: sip:bob@localhost:5160" + "\r\n" + "\r\n"
 	return request
 }
@@ -96,7 +97,7 @@ func MakeRequest(method string, cseq string) string {
 func MakeSubsequentRequest(method string, cseq string, sipHeaders map[string]string) string {
 	var request string
 	request += method + " sip:alice@localhost:5060 " + "SIP/2.0" + "\r\n"
-	request += "Via: " + "SIP/2.0/UDP " + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
+	request += "Via: " + "SIP/2.0/TCP " + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
 	request += "To: " + sipHeaders["to"] + "\r\n"
 	request += "From: " + sipHeaders["from"] + "\r\n"
 	request += "Call-ID: " + sipHeaders["call-id"] + "\r\n"

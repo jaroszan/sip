@@ -19,10 +19,25 @@ type Packet struct {
 
 const udpPacketSize = 2048
 
+//Create mutex to protect existingSessions
+var mu = &sync.RWMutex{}
+
+type sessionData struct {
+	ReceivedOK uint8
+}
+
+var existingSessions map[string]sessionData
+
+func init() {
+	existingSessions = make(map[string]sessionData)
+}
+
 func handleIncomingPacket(inbound chan Packet, outbound chan Packet, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for packet := range inbound {
 		go func() {
+			var requestHandled bool
+			requestHandled = false
 			payload := string(packet.data)
 			lines := strings.Split(payload, "\n")
 			mType, mValue, err := sip.ParseFirstLine(lines[0])
@@ -49,18 +64,38 @@ func handleIncomingPacket(inbound chan Packet, outbound chan Packet, wg *sync.Wa
 					log.Println(mValue + " received")
 				}
 			} else if mType == sip.RESPONSE {
+				sipHeaders := sip.ParseHeaders(lines[1:])
+				mu.Lock()
+				if _, ok := existingSessions[sipHeaders["call-id"]]; !ok {
+					existingSessions[sipHeaders["call-id"]] = sessionData{0}
+				}
+				mu.Unlock()
 				if mValue == "200" {
-					log.Println("200 OK received")
-					sipHeaders := sip.ParseHeaders(lines[1:])
+					//log.Println("200 OK received")
 					if sipHeaders["cseq"] == "1 INVITE" {
-						ackRequest := sip.MakeSubsequentRequest("ACK", "1", sipHeaders)
-						outbound <- Packet{packet.addr, []byte(ackRequest)}
-						byeRequest := sip.MakeSubsequentRequest("BYE", "2", sipHeaders)
-						time.Sleep(time.Second * 2)
-						outbound <- Packet{packet.addr, []byte(byeRequest)}
+						mu.Lock()
+						isOkReceived := existingSessions[sipHeaders["call-id"]].ReceivedOK
+						mu.Unlock()
+						if requestHandled == false && isOkReceived == 0 {
+							mu.Lock()
+							existingSessions[sipHeaders["call-id"]] = sessionData{1}
+							mu.Unlock()
+							requestHandled = true
+							ackRequest := sip.MakeSubsequentRequest("ACK", "1", sipHeaders)
+							outbound <- Packet{packet.addr, []byte(ackRequest)}
+							byeRequest := sip.MakeSubsequentRequest("BYE", "2", sipHeaders)
+							time.Sleep(time.Second * 2)
+							outbound <- Packet{packet.addr, []byte(byeRequest)}
+						} else {
+							log.Println("Retransmission received")
+						}
+					} else if sipHeaders["cseq"] == "2 BYE" {
+						mu.Lock()
+						delete(existingSessions, sipHeaders["call-id"])
+						mu.Unlock()
 					}
 				} else if mValue < "200" {
-					log.Println("Provisional response received: " + mValue)
+					//log.Println("Provisional response received: " + mValue)
 				} else {
 					log.Println("Response received: " + mValue)
 				}
@@ -74,7 +109,7 @@ func main() {
 	wg.Add(3)
 
 	//rand.Seed(time.Now().UTC().UnixNano())
-	connection, _ := sip.Start("127.0.0.1:5160")
+	connection, _ := sip.StartUDP("127.0.0.1:5160")
 
 	// Outbound channel uses connection to send outgoing datagrams
 	outbound := make(chan Packet)
@@ -103,7 +138,7 @@ func main() {
 			outbound <- Packet{remotePeerAddr, []byte(newRequest)}
 		}
 	}()
-	time.Sleep(time.Second * 90)
+	time.Sleep(time.Second * 9)
 	ticker.Stop()
 	wg.Wait()
 

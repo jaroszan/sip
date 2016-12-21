@@ -16,8 +16,8 @@ func init() {
 
 const branchMagicCookie = "z9hG4bK"
 
-// GenerateRandom generates random strings for tags/call-ids/branches
-func GenerateRandom(charsToDouble int) string {
+// generateRandom generates random strings for tags/call-ids/branches
+func generateRandom(charsToDouble int) string {
 	var buf bytes.Buffer
 	for i := 0; i < charsToDouble; i++ {
 		buf.WriteByte(byte(randInt(65, 90)))
@@ -34,6 +34,16 @@ func randInt(min int, max int) int {
 
 // GenerateBranch generates branch for via header
 func GenerateBranch() string {
-	randomPart := GenerateRandom(4)
+	randomPart := generateRandom(4)
 	return branchMagicCookie + randomPart
+}
+
+// GenerateTag generates tags for To/From headers
+func GenerateTag() string {
+	return generateRandom(4)
+}
+
+// GenerateCallID generates call-id
+func GenerateCallID() string {
+	return generateRandom(7)
 }
