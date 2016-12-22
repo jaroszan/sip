@@ -6,7 +6,9 @@ package sip
 
 import (
 	"bytes"
+	"fmt"
 	"math/rand"
+	"os"
 	"time"
 )
 
@@ -46,4 +48,12 @@ func GenerateTag() string {
 // GenerateCallID generates call-id
 func GenerateCallID() string {
 	return generateRandom(7)
+}
+
+// CheckConnError is used to check for errors encountered during connection establishment
+func CheckConnError(err error) {
+	if err != nil {
+		fmt.Println(err.Error())
+		os.Exit(1)
+	}
 }
