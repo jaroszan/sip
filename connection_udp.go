@@ -19,29 +19,32 @@ type Packet struct {
 const udpPacketSize = 2048
 
 // StartUDP prepares and returns UDP connection
-func StartUDP(address string) (chan Packet, chan Packet) {
-	addr, err := net.ResolveUDPAddr("udp", address)
+func StartUDP(lAddr string, rAddr string) (chan []byte, chan []byte) {
+	listenAddr, err := net.ResolveUDPAddr("udp", lAddr)
 	CheckConnError(err)
 
-	conn, err := net.ListenUDP("udp", addr)
+	remotePeerAddr, err := net.ResolveUDPAddr("udp", rAddr)
+	CheckConnError(err)
+
+	conn, err := net.ListenUDP("udp", listenAddr)
 	CheckConnError(err)
 
 	// Outbound channel uses connection to send messages
-	outbound := make(chan Packet)
+	outbound := make(chan []byte)
 	// Inbound channel passes received message to handleIncomingPacket function
-	inbound := make(chan Packet)
+	inbound := make(chan []byte)
 
 	// Goroutine for receiving messages and passing them to handleIncomingPacket function
 	go recvUDP(conn, inbound)
 	// Goroutine for sending messages
-	go sendUDP(conn, outbound)
+	go sendUDP(conn, outbound, remotePeerAddr)
 
 	return inbound, outbound
 }
 
-func sendUDP(connection *net.UDPConn, outbound chan Packet) {
+func sendUDP(connection *net.UDPConn, outbound chan []byte, remotePeer *net.UDPAddr) {
 	for packet := range outbound {
-		_, err := connection.WriteToUDP(packet.data, packet.addr)
+		_, err := connection.WriteToUDP(packet, remotePeer)
 		if err != nil {
 			log.Println("Error on write: ", err)
 			continue
@@ -49,14 +52,16 @@ func sendUDP(connection *net.UDPConn, outbound chan Packet) {
 	}
 }
 
-func recvUDP(connection *net.UDPConn, inbound chan Packet) {
+func recvUDP(connection *net.UDPConn, inbound chan []byte) {
 	for {
 		b := make([]byte, udpPacketSize)
-		n, addr, err := connection.ReadFromUDP(b)
+		n, _, err := connection.ReadFromUDP(b)
+		//n, addr, err := connection.ReadFromUDP(b)
 		if err != nil {
 			log.Println("Error on read: ", err)
 			continue
 		}
-		inbound <- Packet{addr, b[:n]}
+		inbound <- b[:n]
+		//inbound <- Packet{addr, b[:n]}
 	}
 }

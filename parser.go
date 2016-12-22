@@ -80,10 +80,10 @@ func ParseHeaders(headers []string) map[string]string {
 }
 
 //MakeRequest prepares request
-func MakeRequest(method string, cseq string) string {
+func MakeRequest(method string, cseq string, transport string) string {
 	var request string
 	request += method + " sip:alice@localhost:5060 " + "SIP/2.0" + "\r\n"
-	request += "Via: " + "SIP/2.0/TCP " + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
+	request += "Via: " + "SIP/2.0/" + transport + " " + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
 	request += "To: sip:alice@localhost:5060;tag=" + GenerateTag() + "\r\n"
 	request += "From: sip:bob@localhost:5160;tag=" + GenerateTag() + "\r\n"
 	request += "Call-ID: " + GenerateCallID() + "\r\n"
@@ -94,10 +94,10 @@ func MakeRequest(method string, cseq string) string {
 	return request
 }
 
-func MakeSubsequentRequest(method string, cseq string, sipHeaders map[string]string) string {
+func MakeSubsequentRequest(method string, cseq string, transport string, sipHeaders map[string]string) string {
 	var request string
 	request += method + " sip:alice@localhost:5060 " + "SIP/2.0" + "\r\n"
-	request += "Via: " + "SIP/2.0/TCP " + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
+	request += "Via: " + "SIP/2.0/" + transport + " " + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
 	request += "To: " + sipHeaders["to"] + "\r\n"
 	request += "From: " + sipHeaders["from"] + "\r\n"
 	request += "Call-ID: " + sipHeaders["call-id"] + "\r\n"

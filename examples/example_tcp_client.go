@@ -76,9 +76,9 @@ func handleIncomingPacket(inbound chan []byte, outbound chan []byte) {
 							existingSessions[sipHeaders["call-id"]] = sessionData{1}
 							mu.Unlock()
 							requestHandled = true
-							ackRequest := sip.MakeSubsequentRequest("ACK", "1", sipHeaders)
+							ackRequest := sip.MakeSubsequentRequest("ACK", "1", "TCP", sipHeaders)
 							outbound <- []byte(ackRequest)
-							byeRequest := sip.MakeSubsequentRequest("BYE", "2", sipHeaders)
+							byeRequest := sip.MakeSubsequentRequest("BYE", "2", "TCP", sipHeaders)
 							time.Sleep(time.Second * 2)
 							outbound <- []byte(byeRequest)
 						} else {
@@ -110,11 +110,11 @@ func main() {
 	go func() {
 		for _ = range ticker.C {
 			// Prepare INVITE
-			newRequest := sip.MakeRequest("INVITE", "1")
+			newRequest := sip.MakeRequest("INVITE", "1", "TCP")
 			outbound <- []byte(newRequest)
 		}
 	}()
-	time.Sleep(time.Second * 300)
+	time.Sleep(time.Second * 30)
 	ticker.Stop()
 	//conn.Close()
 	time.Sleep(time.Second * 5)
