@@ -12,7 +12,7 @@ import (
 )
 
 // StartTCPClient prepares TCP connection and returns inbound/outbound channels
-func StartTCPClient(lAddr string, rAddr string) (chan []byte, chan []byte) {
+func StartTCPClient(lAddr string, rAddr string) (chan []byte, chan []byte, *net.TCPConn) {
 	//var wg sync.WaitGroup
 	//wg.Add(2)
 	//Resolve local address
@@ -37,7 +37,7 @@ func StartTCPClient(lAddr string, rAddr string) (chan []byte, chan []byte) {
 	// Goroutine for sending messages
 	go sendTCP(conn, outbound)
 
-	return inbound, outbound
+	return inbound, outbound, conn
 
 }
 

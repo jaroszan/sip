@@ -76,9 +76,9 @@ func handleIncomingPacket(inbound chan []byte, outbound chan []byte) {
 							existingSessions[sipHeaders["call-id"]] = sessionData{1}
 							mu.Unlock()
 							requestHandled = true
-							ackRequest := sip.MakeSubsequentRequest("ACK", "1", "TCP", sipHeaders)
+							ackRequest := sip.PrepareInDialogRequest("ACK", "1", sipHeaders)
 							outbound <- []byte(ackRequest)
-							byeRequest := sip.MakeSubsequentRequest("BYE", "2", "TCP", sipHeaders)
+							byeRequest := sip.PrepareInDialogRequest("BYE", "2", sipHeaders)
 							time.Sleep(time.Second * 2)
 							outbound <- []byte(byeRequest)
 						} else {
@@ -102,19 +102,20 @@ func handleIncomingPacket(inbound chan []byte, outbound chan []byte) {
 func main() {
 	// Initiate TCP connection to remote peer, inbound/outbound are channels are used
 	// for receiving and sending messages respectively
-	inbound, outbound := sip.StartTCPClient("127.0.0.1:5160", "127.0.0.1:5060")
+	inbound, outbound, conn := sip.StartTCPClient("127.0.0.1:5160", "127.0.0.1:5060")
+	defer conn.Close()
 	// Goroutine for processing incoming messages
 	go handleIncomingPacket(inbound, outbound)
 
-	ticker := time.NewTicker(time.Millisecond * 50)
+	ticker := time.NewTicker(time.Millisecond * 40)
 	go func() {
 		for _ = range ticker.C {
 			// Prepare INVITE
-			newRequest := sip.MakeRequest("INVITE", "1", "TCP")
+			newRequest := sip.NewDialog("sip:bob@localhost:5160", "sip:alice@localhost:5060", "TCP")
 			outbound <- []byte(newRequest)
 		}
 	}()
-	time.Sleep(time.Second * 30)
+	time.Sleep(time.Second * 300)
 	ticker.Stop()
 	//conn.Close()
 	time.Sleep(time.Second * 5)

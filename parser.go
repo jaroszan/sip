@@ -17,10 +17,20 @@ const (
 	RESPONSE = "response"
 )
 
+type Dialog struct {
+	toTag            string
+	fromTag          string
+	transport        string
+	remoteContactUri string
+}
+
+var existingDialogs map[string]Dialog
+
 var existingTags map[string]string
 
 func init() {
 	existingTags = make(map[string]string)
+	existingDialogs = make(map[string]Dialog)
 }
 
 // PrepareResponse builds basic structure for a response to an incoming request
@@ -79,25 +89,35 @@ func ParseHeaders(headers []string) map[string]string {
 	return sipHeaders
 }
 
-//MakeRequest prepares request
-func MakeRequest(method string, cseq string, transport string) string {
+// NewDialog prepares INVITE for initiation of a new dialog
+func NewDialog(fromUri string, toUri string, transport string) string {
+	callID := GenerateCallID()
+	fromTag := GenerateTag()
+	existingDialogs[callID] = Dialog{fromTag: fromTag, transport: transport}
 	var request string
-	request += method + " sip:alice@localhost:5060 " + "SIP/2.0" + "\r\n"
+	request += "INVITE " + toUri + " SIP/2.0" + "\r\n"
 	request += "Via: " + "SIP/2.0/" + transport + " " + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
-	request += "To: sip:alice@localhost:5060;tag=" + GenerateTag() + "\r\n"
-	request += "From: sip:bob@localhost:5160;tag=" + GenerateTag() + "\r\n"
-	request += "Call-ID: " + GenerateCallID() + "\r\n"
-	request += "CSeq: " + cseq + " " + method + "\r\n"
+	request += "To: " + toUri + "\r\n"
+	request += "From: " + fromUri + ";tag=" + fromTag + "\r\n"
+	request += "Call-ID: " + callID + "\r\n"
+	request += "CSeq: 1 INVITE" + "\r\n"
 	request += "Max-Forwards: 70" + "\r\n"
 	request += "Content-Length: 0" + "\r\n"
-	request += "Contact: sip:bob@localhost:5160" + "\r\n" + "\r\n"
+	request += "Contact: " + fromUri + "\r\n" + "\r\n"
 	return request
 }
 
-func MakeSubsequentRequest(method string, cseq string, transport string, sipHeaders map[string]string) string {
+// PrepareInDialogRequest prepares in-dialog requests
+//func PrepareInDialogRequest(method string, cseq string, transport string, sipHeaders map[string]string) string {
+func PrepareInDialogRequest(method string, cseq string, sipHeaders map[string]string) string {
+	tmp := existingDialogs[sipHeaders["call-id"]]
+	tmpContact := strings.TrimPrefix(sipHeaders["contact"], "<")
+	tmpContact = strings.TrimSuffix(tmpContact, ">")
+	tmp.remoteContactUri = tmpContact
+	existingDialogs[sipHeaders["call-id"]] = tmp
 	var request string
-	request += method + " sip:alice@localhost:5060 " + "SIP/2.0" + "\r\n"
-	request += "Via: " + "SIP/2.0/" + transport + " " + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
+	request += method + " " + existingDialogs[sipHeaders["call-id"]].remoteContactUri + " SIP/2.0" + "\r\n"
+	request += "Via: " + "SIP/2.0/" + existingDialogs[sipHeaders["call-id"]].transport + " " + "localhost:5160;branch=" + GenerateBranch() + "\r\n"
 	request += "To: " + sipHeaders["to"] + "\r\n"
 	request += "From: " + sipHeaders["from"] + "\r\n"
 	request += "Call-ID: " + sipHeaders["call-id"] + "\r\n"
