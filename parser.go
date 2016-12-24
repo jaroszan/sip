@@ -63,8 +63,20 @@ func AddHeader(responseHeaders string, newHeaderName string, newHeaderValue stri
 	return responseHeaders
 }
 
-// ParseFirstLine is used to determine type of the incoming message
-func ParseFirstLine(incomingFirstLine string) (string, string, error) {
+//ParseIncomingMessage is used to parse incoming message
+func ParseIncomingMessage(payload []byte) (string, string, map[string]string, error) {
+	message := string(payload)
+	lines := strings.Split(message, "\n")
+	messageType, messageValue, err := parseFirstLine(lines[0])
+	if err != nil {
+		return "", "", nil, err
+	}
+
+	sipHeaders := parseHeaders(lines[1:])
+	return messageType, messageValue, sipHeaders, nil
+}
+
+func parseFirstLine(incomingFirstLine string) (string, string, error) {
 	firstLine := strings.Fields(incomingFirstLine)
 	if firstLine[2] == "SIP/2.0" {
 		return REQUEST, firstLine[0], nil
@@ -75,8 +87,7 @@ func ParseFirstLine(incomingFirstLine string) (string, string, error) {
 	}
 }
 
-// ParseHeaders parses headers in the incoming message
-func ParseHeaders(headers []string) map[string]string {
+func parseHeaders(headers []string) map[string]string {
 	sipHeaders := make(map[string]string)
 	for _, value := range headers {
 		header := strings.SplitN(value, ":", 2)
