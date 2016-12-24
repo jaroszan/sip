@@ -20,7 +20,7 @@ func StartTCPClient(lAddr string, rAddr string) (chan []byte, chan []byte, *net.
 	CheckConnError(err)
 
 	//Resolve remote address
-	remoteTcpAddr, err := net.ResolveTCPAddr("tcp4", "127.0.0.1:5060")
+	remoteTcpAddr, err := net.ResolveTCPAddr("tcp4", rAddr)
 	CheckConnError(err)
 
 	//Establish connection to remote address
