@@ -1,15 +1,9 @@
 package main
 
 import (
-	//"bufio"
-	"fmt"
 	"github.com/jaroszan/sip"
 	"log"
-	//"net"
-	//"os"
-	//"strconv"
-	//"bytes"
-	"strings"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -28,23 +22,17 @@ func init() {
 }
 
 func handleIncomingPacket(inbound chan []byte, outbound chan []byte) {
-	//defer wg.Done()
-	for message := range inbound {
-		message := message
+	for payload := range inbound {
+		payload := payload
 		go func() {
-			var requestHandled bool
-			requestHandled = false
-			payload := string(message)
-			lines := strings.Split(payload, "\n")
-			mType, mValue, err := sip.ParseFirstLine(lines[0])
-
+			mType, mValue, sipHeaders, err := sip.ParseIncomingMessage(payload)
 			if err != nil {
-				fmt.Println(err)
+				log.Println(err)
+				log.Println("Dropping request")
+				runtime.Goexit()
 			}
-			sipHeaders := sip.ParseHeaders(lines[1:])
 
 			if mType == sip.REQUEST {
-				sipHeaders := sip.ParseHeaders(lines[1:])
 				if mValue == "INVITE" {
 					outboundTrying := sip.PrepareResponse(sipHeaders, 100, "Trying")
 					outbound180 := sip.PrepareResponse(sipHeaders, 180, "Ringing")
@@ -71,11 +59,10 @@ func handleIncomingPacket(inbound chan []byte, outbound chan []byte) {
 						mu.Lock()
 						isOkReceived := existingSessions[sipHeaders["call-id"]].ReceivedOK
 						mu.Unlock()
-						if requestHandled == false && isOkReceived == 0 {
+						if isOkReceived == 0 {
 							mu.Lock()
 							existingSessions[sipHeaders["call-id"]] = sessionData{1}
 							mu.Unlock()
-							requestHandled = true
 							ackRequest := sip.PrepareInDialogRequest("ACK", "1", sipHeaders)
 							outbound <- []byte(ackRequest)
 							byeRequest := sip.PrepareInDialogRequest("BYE", "2", sipHeaders)
@@ -102,20 +89,22 @@ func handleIncomingPacket(inbound chan []byte, outbound chan []byte) {
 func main() {
 	// Initiate TCP connection to remote peer, inbound/outbound are channels are used
 	// for receiving and sending messages respectively
-	inbound, outbound, conn := sip.StartTCPClient("127.0.0.1:5160", "127.0.0.1:5060")
+	localAddr := "localhost:5160"
+	remoteAddr := "localhost:5060"
+	inbound, outbound, conn := sip.StartTCPClient(localAddr, remoteAddr)
 	defer conn.Close()
 	// Goroutine for processing incoming messages
 	go handleIncomingPacket(inbound, outbound)
 
-	ticker := time.NewTicker(time.Millisecond * 40)
+	ticker := time.NewTicker(time.Millisecond * 25)
 	go func() {
 		for _ = range ticker.C {
 			// Prepare INVITE
-			newRequest := sip.NewDialog("sip:bob@localhost:5160", "sip:alice@localhost:5060", "TCP")
+			newRequest := sip.NewDialog("sip:bob@"+localAddr, "sip:alice@"+remoteAddr, "TCP")
 			outbound <- []byte(newRequest)
 		}
 	}()
-	time.Sleep(time.Second * 300)
+	time.Sleep(time.Second * 30)
 	ticker.Stop()
 	//conn.Close()
 	time.Sleep(time.Second * 5)

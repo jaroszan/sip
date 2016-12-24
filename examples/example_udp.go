@@ -1,10 +1,9 @@
 package main
 
 import (
-	"fmt"
 	"github.com/jaroszan/sip"
 	"log"
-	"strings"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -26,19 +25,17 @@ func init() {
 
 func handleIncomingPacket(inbound chan []byte, outbound chan []byte) {
 	for packet := range inbound {
+		packet := packet
 		go func() {
-			var requestHandled bool
-			requestHandled = false
-			payload := string(packet)
-			lines := strings.Split(payload, "\n")
-			mType, mValue, err := sip.ParseFirstLine(lines[0])
-
+			mType, mValue, sipHeaders, err := sip.ParseIncomingMessage(packet)
 			if err != nil {
-				fmt.Println(err)
+				log.Println(err)
+				log.Println("Dropping request")
+				runtime.Goexit()
+
 			}
 
 			if mType == sip.REQUEST {
-				sipHeaders := sip.ParseHeaders(lines[1:])
 				if mValue == "INVITE" {
 					outboundTrying := sip.PrepareResponse(sipHeaders, 100, "Trying")
 					outbound180 := sip.PrepareResponse(sipHeaders, 180, "Ringing")
@@ -55,26 +52,23 @@ func handleIncomingPacket(inbound chan []byte, outbound chan []byte) {
 					log.Println(mValue + " received")
 				}
 			} else if mType == sip.RESPONSE {
-				sipHeaders := sip.ParseHeaders(lines[1:])
 				mu.Lock()
 				if _, ok := existingSessions[sipHeaders["call-id"]]; !ok {
 					existingSessions[sipHeaders["call-id"]] = sessionData{0}
 				}
 				mu.Unlock()
 				if mValue == "200" {
-					//log.Println("200 OK received")
 					if sipHeaders["cseq"] == "1 INVITE" {
 						mu.Lock()
 						isOkReceived := existingSessions[sipHeaders["call-id"]].ReceivedOK
 						mu.Unlock()
-						if requestHandled == false && isOkReceived == 0 {
+						if isOkReceived == 0 {
 							mu.Lock()
 							existingSessions[sipHeaders["call-id"]] = sessionData{1}
 							mu.Unlock()
-							requestHandled = true
-							ackRequest := sip.MakeSubsequentRequest("ACK", "1", "UDP", sipHeaders)
+							ackRequest := sip.PrepareInDialogRequest("ACK", "1", sipHeaders)
 							outbound <- []byte(ackRequest)
-							byeRequest := sip.MakeSubsequentRequest("BYE", "2", "UDP", sipHeaders)
+							byeRequest := sip.PrepareInDialogRequest("BYE", "2", sipHeaders)
 							time.Sleep(time.Second * 2)
 							outbound <- []byte(byeRequest)
 						} else {
@@ -96,20 +90,22 @@ func handleIncomingPacket(inbound chan []byte, outbound chan []byte) {
 }
 
 func main() {
-	inbound, outbound := sip.StartUDP("127.0.0.1:5160", "127.0.0.1:5060")
+	localAddr := "localhost:5160"
+	remoteAddr := "localhost:5060"
+	inbound, outbound := sip.StartUDP(localAddr, remoteAddr)
 
 	// Goroutine for processing incoming datagrams
 	go handleIncomingPacket(inbound, outbound)
 
-	ticker := time.NewTicker(time.Millisecond * 50)
+	ticker := time.NewTicker(time.Millisecond * 25)
 	go func() {
 		for _ = range ticker.C {
 			// Prepare INVITE
-			newRequest := sip.MakeRequest("INVITE", "1", "UDP")
+			newRequest := sip.NewDialog("sip:bob@"+localAddr, "sip:alice@"+remoteAddr, "UDP")
 			outbound <- []byte(newRequest)
 		}
 	}()
-	time.Sleep(time.Second * 9)
+	time.Sleep(time.Second * 30)
 	ticker.Stop()
 	time.Sleep(time.Second * 5)
 
