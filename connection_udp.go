@@ -19,7 +19,7 @@ type Packet struct {
 const udpPacketSize = 2048
 
 // StartUDP prepares and returns UDP connection
-func StartUDP(lAddr string, rAddr string) (chan []byte, chan []byte) {
+func StartUDP(lAddr string, rAddr string) (chan SipMessage, chan SipMessage) {
 	listenAddr, err := net.ResolveUDPAddr("udp", lAddr)
 	CheckConnError(err)
 
@@ -30,9 +30,9 @@ func StartUDP(lAddr string, rAddr string) (chan []byte, chan []byte) {
 	CheckConnError(err)
 
 	// Outbound channel uses connection to send messages
-	outbound := make(chan []byte)
+	outbound := make(chan SipMessage)
 	// Inbound channel passes received message to handleIncomingPacket function
-	inbound := make(chan []byte)
+	inbound := make(chan SipMessage)
 
 	// Goroutine for receiving messages and passing them to handleIncomingPacket function
 	go recvUDP(conn, inbound)
@@ -42,9 +42,9 @@ func StartUDP(lAddr string, rAddr string) (chan []byte, chan []byte) {
 	return inbound, outbound
 }
 
-func sendUDP(connection *net.UDPConn, outbound chan []byte, remotePeer *net.UDPAddr) {
+func sendUDP(connection *net.UDPConn, outbound chan SipMessage, remotePeer *net.UDPAddr) {
 	for packet := range outbound {
-		_, err := connection.WriteToUDP(packet, remotePeer)
+		_, err := connection.WriteToUDP(SerializeSipMessage(packet), remotePeer)
 		if err != nil {
 			log.Println("Error on write: ", err)
 			continue
@@ -52,16 +52,19 @@ func sendUDP(connection *net.UDPConn, outbound chan []byte, remotePeer *net.UDPA
 	}
 }
 
-func recvUDP(connection *net.UDPConn, inbound chan []byte) {
+//TODO check if datagrams are coming from predefined remote peer
+func recvUDP(connection *net.UDPConn, inbound chan SipMessage) {
 	for {
 		b := make([]byte, udpPacketSize)
-		n, _, err := connection.ReadFromUDP(b)
-		//n, addr, err := connection.ReadFromUDP(b)
+		_, _, err := connection.ReadFromUDP(b)
 		if err != nil {
 			log.Println("Error on read: ", err)
 			continue
 		}
-		inbound <- b[:n]
-		//inbound <- Packet{addr, b[:n]}
+		firstLine, sipHeaders, sipMessageBody, err := ParseIncomingMessage(b, false)
+		if err != nil {
+			log.Println(err)
+		}
+		inbound <- SipMessage{FirstLine: firstLine, Headers: sipHeaders, Body: sipMessageBody}
 	}
 }

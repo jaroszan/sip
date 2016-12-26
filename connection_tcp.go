@@ -13,7 +13,7 @@ import (
 )
 
 // StartTCPClient prepares TCP connection and returns inbound/outbound channels
-func StartTCPClient(lAddr string, rAddr string) (chan SipMessage, chan SipMessage, *net.TCPConn) {
+func StartTCPClient(lAddr string, rAddr string) (chan SipMessage, chan SipMessage) {
 	//Resolve local address
 	localTcpAddr, err := net.ResolveTCPAddr("tcp4", lAddr)
 	CheckConnError(err)
@@ -28,45 +28,26 @@ func StartTCPClient(lAddr string, rAddr string) (chan SipMessage, chan SipMessag
 
 	// Outbound channel uses connection to send messages
 	outbound := make(chan SipMessage)
-	// Inbound channel passes received message to handleIncomingPacket function
+	// Inbound channel passes received messages to processing goroutine
 	inbound := make(chan SipMessage)
 
-	// Goroutine for receiving messages and passing them to handleIncomingPacket function
+	// Goroutine for receiving messages and passing them to processing function
 	go recvTCP(conn, inbound)
 	// Goroutine for sending messages
 	go sendTCP(conn, outbound)
 
-	return inbound, outbound, conn
+	return inbound, outbound
 
 }
 
 func sendTCP(connection *net.TCPConn, outbound chan SipMessage) {
 	for message := range outbound {
-		_, err := connection.Write(serializeSipMessage(message))
+		_, err := connection.Write(SerializeSipMessage(message))
 		if err != nil {
 			log.Println("Error on write: ", err)
 			continue
 		}
 	}
-}
-
-//TODO put mandatory headers first
-func serializeSipMessage(sipMessage SipMessage) []byte {
-	var serializedMessage bytes.Buffer
-	serializedMessage.WriteString(sipMessage.FirstLine)
-	serializedMessage.WriteString("\r\n")
-	for name, value := range sipMessage.Headers {
-		serializedMessage.WriteString(name)
-		serializedMessage.WriteString(": ")
-		serializedMessage.WriteString(value)
-		serializedMessage.WriteString("\r\n")
-	}
-	serializedMessage.WriteString("\r\n")
-	if len(sipMessage.Body) > 0 {
-		serializedMessage.WriteString(sipMessage.Body)
-		serializedMessage.WriteString("\r\n")
-	}
-	return serializedMessage.Bytes()
 }
 
 func recvTCP(connection *net.TCPConn, inbound chan SipMessage) {
@@ -83,7 +64,7 @@ func recvTCP(connection *net.TCPConn, inbound chan SipMessage) {
 				break
 			}
 		}
-		firstLine, sipHeaders, _ := ParseIncomingMessage(buffer.Bytes())
+		firstLine, sipHeaders, _, _ := ParseIncomingMessage(buffer.Bytes(), true)
 		contentLength, err := strconv.Atoi(sipHeaders["content-length"])
 		if err != nil {
 			log.Println("Content-Length value cannot be converted to number, setting it to 0")
