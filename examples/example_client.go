@@ -33,21 +33,7 @@ func handleIncomingPacket(inbound chan sip.SipMessage, outbound chan sip.SipMess
 			}
 
 			if mType == sip.REQUEST {
-				/*if mValue == "INVITE" {
-					outboundTrying := sip.PrepareResponse(sipHeaders, 100, "Trying")
-					outbound180 := sip.PrepareResponse(sipHeaders, 180, "Ringing")
-					outbound180 = sip.AddHeader(outbound180, "Contact", "sip:bob@localhost:5060")
-					outboundOK := sip.PrepareResponse(sipHeaders, 200, "OK")
-					outboundOK = sip.AddHeader(outboundOK, "Contact", "sip:alice@localhost:5060")
-					outbound <- []byte(outboundTrying)
-					outbound <- []byte(outbound180)
-					outbound <- []byte(outboundOK)
-				} else if mValue == "BYE" {
-					outboundOK := sip.PrepareResponse(sipHeaders, 200, "OK")
-					outbound <- []byte(outboundOK)
-				} else {
-					log.Println(mValue + " received")
-				}*/
+				//PROCESS REQUESTS HERE
 			} else if mType == sip.RESPONSE {
 				mu.Lock()
 				if _, ok := existingSessions[sipMessage.Headers["call-id"]]; !ok {
@@ -87,12 +73,14 @@ func handleIncomingPacket(inbound chan sip.SipMessage, outbound chan sip.SipMess
 }
 
 func main() {
-	// Initiate TCP connection to remote peer, inbound/outbound are channels are used
-	// for receiving and sending messages respectively
+	// Define local and remote peer
 	localAddr := "localhost:5160"
 	remoteAddr := "localhost:5060"
+	// Define protocol to be used, either TCP or UDP is a valid choice
 	transport := "TCP"
-	inbound, outbound := sip.StartTCPClient(localAddr, remoteAddr)
+	// Initiate TCP connection to remote peer, inbound/outbound are channels are used
+	// for receiving and sending messages respectively
+	inbound, outbound := sip.StartSIP(localAddr, remoteAddr, transport)
 	// Goroutine for processing incoming messages
 	go handleIncomingPacket(inbound, outbound)
 
