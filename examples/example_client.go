@@ -74,10 +74,10 @@ func handleIncomingPacket(inbound chan sip.SipMessage, outbound chan sip.SipMess
 
 func main() {
 	// Define local and remote peer
-	localAddr := "localhost:5160"
-	remoteAddr := "localhost:5060"
+	localAddr := "localhost:5060"
+	remoteAddr := "localhost:5160"
 	// Define protocol to be used, either TCP or UDP is a valid choice
-	transport := "TCP"
+	transport := "UDP"
 	// Initiate TCP connection to remote peer, inbound/outbound are channels are used
 	// for receiving and sending messages respectively
 	inbound, outbound := sip.StartSIP(localAddr, remoteAddr, transport)
