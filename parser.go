@@ -1,4 +1,4 @@
-// Copyright 2015 sip authors. All rights reserved.
+// Copyright 2015-2016 sip authors. All rights reserved.
 // Use of this source code is governed by a MIT-style license that can be
 // found in the LICENSE file.
 
@@ -41,33 +41,34 @@ func init() {
 }
 
 // PrepareResponse builds basic structure for a response to an incoming request
-func PrepareResponse(sipHeaders map[string]string, code int, reasonPhrase string) string {
+func PrepareResponse(sipHeaders map[string]string, code int, reasonPhrase string) SipMessage {
+	var toHeader string
 	if code > 100 {
 		if _, ok := existingTags[sipHeaders["call-id"]]; !ok {
 			existingTags[sipHeaders["call-id"]] = sipHeaders["to"] + ";tag=" + GenerateTag()
 		}
+		toHeader = existingTags[sipHeaders["call-id"]]
 	}
-	var response string
-	response += "SIP/2.0 " + strconv.Itoa(code) + " " + reasonPhrase + "\r\n"
-	response += "Via: " + sipHeaders["via"] + "\r\n"
 	if code == 100 {
-		response += "To: " + sipHeaders["to"] + "\r\n"
-	} else {
-		response += "To: " + existingTags[sipHeaders["call-id"]] + "\r\n"
-		//response += "Contact: " + "sip:bob@localhost:5060" + "\r\n"
+		toHeader = sipHeaders["to"]
 	}
-	response += "From: " + sipHeaders["from"] + "\r\n"
-	response += "Call-ID: " + sipHeaders["call-id"] + "\r\n"
-	response += "CSeq: " + sipHeaders["cseq"] + "\r\n"
-	response += "Max-Forwards: " + sipHeaders["max-forwards"] + "\r\n" + "\r\n"
-	return response
+	firstLine := "SIP/2.0 " + strconv.Itoa(code) + " " + reasonPhrase
+	sipBody := []byte{}
+	headers := map[string]string{
+		"Via":            sipHeaders["via"],
+		"Call-ID":        sipHeaders["call-id"],
+		"To":             toHeader,
+		"From":           sipHeaders["from"],
+		"Cseq":           sipHeaders["cseq"],
+		"Content-Length": strconv.Itoa(len(sipBody)),
+	}
+	return SipMessage{FirstLine: firstLine, Headers: headers, Body: string(sipBody)}
 }
 
 // AddHeader adds user-specified non-mandatory header to a message
-func AddHeader(responseHeaders string, newHeaderName string, newHeaderValue string) string {
-	responseHeaders = strings.TrimSpace(responseHeaders)
-	responseHeaders += "\r\n" + newHeaderName + ": " + newHeaderValue + "\r\n" + "\r\n"
-	return responseHeaders
+func AddHeader(sipMessage SipMessage, newHeaderName string, newHeaderValue string) SipMessage {
+	sipMessage.Headers[newHeaderName] = newHeaderValue
+	return sipMessage
 }
 
 //ParseIncomingMessage is used to parse incoming message
