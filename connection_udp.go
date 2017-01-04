@@ -61,7 +61,7 @@ func recvUDP(connection *net.UDPConn, inbound chan SipMessage) {
 			log.Println("Error on read: ", err)
 			continue
 		}
-		firstLine, sipHeaders, sipMessageBody, err := ParseIncomingMessage(b, false)
+		firstLine, sipHeaders, sipMessageBody, err := DeserializeSipMessage(b, false)
 		if err != nil {
 			log.Println(err)
 		}

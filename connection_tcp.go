@@ -64,7 +64,7 @@ func recvTCP(connection *net.TCPConn, inbound chan SipMessage) {
 				break
 			}
 		}
-		firstLine, sipHeaders, _, _ := ParseIncomingMessage(buffer.Bytes(), true)
+		firstLine, sipHeaders, _, _ := DeserializeSipMessage(buffer.Bytes(), true)
 		contentLength, err := strconv.Atoi(sipHeaders["content-length"])
 		if err != nil {
 			log.Println("Content-Length value cannot be converted to number, setting it to 0")

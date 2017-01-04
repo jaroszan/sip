@@ -5,7 +5,6 @@
 package sip
 
 import (
-	"bytes"
 	"errors"
 	"strconv"
 	"strings"
@@ -17,12 +16,6 @@ const (
 	REQUEST  = "request"
 	RESPONSE = "response"
 )
-
-type SipMessage struct {
-	FirstLine string
-	Headers   map[string]string
-	Body      string
-}
 
 type Dialog struct {
 	toTag            string
@@ -71,31 +64,6 @@ func AddHeader(sipMessage SipMessage, newHeaderName string, newHeaderValue strin
 	return sipMessage
 }
 
-//ParseIncomingMessage is used to parse incoming message
-//streamed parameter determines transport type
-func ParseIncomingMessage(payload []byte, streamed bool) (string, map[string]string, string, error) {
-	message := string(payload)
-	var lines []string
-	var messageParts []string
-	if !streamed {
-		messageParts = strings.Split(message, "\r\n\r\n")
-		lines = strings.Split(messageParts[0], "\n")
-	} else {
-		lines = strings.Split(message, "\n")
-	}
-	_, _, err := ParseFirstLine(lines[0])
-	if err != nil {
-		return "", nil, "", err
-	}
-	sipHeaders := parseHeaders(lines[1:])
-	if !streamed {
-		if len(messageParts[1]) == 2 {
-			return lines[0], sipHeaders, messageParts[1], nil
-		}
-	}
-	return lines[0], sipHeaders, "", nil
-}
-
 func ParseFirstLine(incomingFirstLine string) (string, string, error) {
 	firstLine := strings.Fields(incomingFirstLine)
 	if firstLine[2] == "SIP/2.0" {
@@ -107,25 +75,14 @@ func ParseFirstLine(incomingFirstLine string) (string, string, error) {
 	}
 }
 
-func parseHeaders(headers []string) map[string]string {
-	sipHeaders := make(map[string]string)
-	for _, value := range headers {
-		header := strings.SplitN(value, ":", 2)
-		if len(header) != 2 {
-			// TODO: processing of SDP body
-			break
-		}
-		sipHeaders[strings.TrimSpace(strings.ToLower(header[0]))] = strings.TrimSpace(header[1])
-	}
-	return sipHeaders
-}
+
 
 // NewDialog prepares INVITE for initiation of a new dialog
 func NewDialog(fromUri string, toUri string, transport string) SipMessage {
 	callID := GenerateCallID()
 	fromTag := GenerateTag()
 	newBranch := GenerateBranch()
-	existingDialogs[callID] = Dialog{fromTag: fromTag, transport: transport}
+	existingDialogs[callID] = Dialog{fromTag: fromTag, transport: transport, toTag: ""}
 	firstLine := "INVITE " + toUri + " SIP/2.0"
 	headers := map[string]string{
 		"Via":            "SIP/2.0/" + transport + " " + "localhost:5160;branch=" + newBranch,
@@ -142,7 +99,6 @@ func NewDialog(fromUri string, toUri string, transport string) SipMessage {
 }
 
 // PrepareInDialogRequest prepares in-dialog requests
-//func PrepareInDialogRequest(method string, cseq string, transport string, sipHeaders map[string]string) string {
 func PrepareInDialogRequest(method string, cseq string, sipHeaders map[string]string) SipMessage {
 	tmp := existingDialogs[sipHeaders["call-id"]]
 	tmpContact := strings.TrimPrefix(sipHeaders["contact"], "<")
@@ -164,22 +120,3 @@ func PrepareInDialogRequest(method string, cseq string, sipHeaders map[string]st
 	return SipMessage{FirstLine: firstLine, Headers: headers, Body: sdpBody}
 }
 
-//TODO put mandatory headers first
-// SerializeSipMessage serializes SipMessage structure according to SIP message format (RFC 3261)
-func SerializeSipMessage(sipMessage SipMessage) []byte {
-	var serializedMessage bytes.Buffer
-	serializedMessage.WriteString(sipMessage.FirstLine)
-	serializedMessage.WriteString("\r\n")
-	for name, value := range sipMessage.Headers {
-		serializedMessage.WriteString(name)
-		serializedMessage.WriteString(": ")
-		serializedMessage.WriteString(value)
-		serializedMessage.WriteString("\r\n")
-	}
-	serializedMessage.WriteString("\r\n")
-	if len(sipMessage.Body) > 0 {
-		serializedMessage.WriteString(sipMessage.Body)
-		serializedMessage.WriteString("\r\n")
-	}
-	return serializedMessage.Bytes()
-}
