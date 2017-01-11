@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // REQUEST is used for processing SIP requests
@@ -16,6 +17,9 @@ const (
 	REQUEST  = "request"
 	RESPONSE = "response"
 )
+
+//Create mutex to protect existingSessions
+var mu = &sync.RWMutex{}
 
 type Dialog struct {
 	toTag            string
@@ -45,7 +49,6 @@ func PrepareResponse(sipHeaders map[string]string, code int, reasonPhrase string
 	if code == 100 {
 		toHeader = sipHeaders["to"]
 	}
-	firstLine := "SIP/2.0 " + strconv.Itoa(code) + " " + reasonPhrase
 	sipBody := []byte{}
 	headers := map[string]string{
 		"Via":            sipHeaders["via"],
@@ -55,24 +58,23 @@ func PrepareResponse(sipHeaders map[string]string, code int, reasonPhrase string
 		"Cseq":           sipHeaders["cseq"],
 		"Content-Length": strconv.Itoa(len(sipBody)),
 	}
-	return SipMessage{FirstLine: firstLine, Headers: headers, Body: string(sipBody)}
+	return Response{SipVersion: "SIP/2.0", StatusCode: code, ReasonPhrase: reasonPhrase, Headers: headers, Body: string(sipBody)}
 }
 
 // AddHeader adds user-specified non-mandatory header to a message
-func AddHeader(sipMessage SipMessage, newHeaderName string, newHeaderValue string) SipMessage {
+/*func AddHeader(sipMessage SipMessage, newHeaderName string, newHeaderValue string) SipMessage {
 	sipMessage.Headers[newHeaderName] = newHeaderValue
 	return sipMessage
-}
+}*/
 
-func ParseFirstLine(incomingFirstLine string) (string, string, error) {
+func ParseFirstLine(incomingFirstLine string) (string, []string, error) {
 	firstLine := strings.Fields(incomingFirstLine)
 	if firstLine[2] == "SIP/2.0" {
-		return REQUEST, firstLine[0], nil
+		return REQUEST, firstLine, nil
 	} else if firstLine[0] == "SIP/2.0" {
-		return RESPONSE, firstLine[1], nil
-	} else {
-		return "", "", errors.New("Incoming datagram doesn't look like a SIP message: " + incomingFirstLine)
+		return RESPONSE, firstLine, nil
 	}
+	return "", nil, errors.New("Incoming datagram doesn't look like a SIP message: " + incomingFirstLine)
 }
 
 
@@ -82,8 +84,9 @@ func NewDialog(fromUri string, toUri string, transport string) SipMessage {
 	callID := GenerateCallID()
 	fromTag := GenerateTag()
 	newBranch := GenerateBranch()
+	mu.Lock()
 	existingDialogs[callID] = Dialog{fromTag: fromTag, transport: transport, toTag: ""}
-	firstLine := "INVITE " + toUri + " SIP/2.0"
+	mu.Unlock()
 	headers := map[string]string{
 		"Via":            "SIP/2.0/" + transport + " " + "localhost:5160;branch=" + newBranch,
 		"To":             toUri,
@@ -95,20 +98,22 @@ func NewDialog(fromUri string, toUri string, transport string) SipMessage {
 		"Contact":        fromUri,
 	}
 	sdpBody := ""
-	return SipMessage{FirstLine: firstLine, Headers: headers, Body: sdpBody}
+	return Request{Method: "INVITE", RUri: toUri, SipVersion: "SIP/2.0", Headers: headers, Body: sdpBody}
 }
 
 // PrepareInDialogRequest prepares in-dialog requests
 func PrepareInDialogRequest(method string, cseq string, sipHeaders map[string]string) SipMessage {
+	mu.Lock()
+	inDialogTransport := existingDialogs[sipHeaders["call-id"]].transport
 	tmp := existingDialogs[sipHeaders["call-id"]]
 	tmpContact := strings.TrimPrefix(sipHeaders["contact"], "<")
 	tmpContact = strings.TrimSuffix(tmpContact, ">")
 	tmp.remoteContactUri = tmpContact
-	newBranch := GenerateBranch()
 	existingDialogs[sipHeaders["call-id"]] = tmp
-	firstLine := method + " " + existingDialogs[sipHeaders["call-id"]].remoteContactUri + " SIP/2.0"
+	mu.Unlock()
+	newBranch := GenerateBranch()
 	headers := map[string]string{
-		"Via":            "SIP/2.0/" + existingDialogs[sipHeaders["call-id"]].transport + " " + "localhost:5160;branch=" + newBranch,
+		"Via":            "SIP/2.0/" + inDialogTransport + " " + "localhost:5160;branch=" + newBranch,
 		"To":             sipHeaders["to"],
 		"From":           sipHeaders["from"],
 		"Call-ID":        sipHeaders["call-id"],
@@ -117,6 +122,6 @@ func PrepareInDialogRequest(method string, cseq string, sipHeaders map[string]st
 		"Content-Length": "0",
 	}
 	sdpBody := ""
-	return SipMessage{FirstLine: firstLine, Headers: headers, Body: sdpBody}
+	return Request{Method: method, RUri: existingDialogs[sipHeaders["call-id"]].remoteContactUri, SipVersion: "SIP/2.0", Headers: headers, Body: sdpBody}
 }
 

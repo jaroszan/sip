@@ -1,4 +1,4 @@
-// Copyright 2015 sip authors. All rights reserved.
+// Copyright 2016 sip authors. All rights reserved.
 // Use of this source code is governed by a MIT-style license that can be
 // found in the LICENSE file.
 
@@ -44,7 +44,7 @@ func StartUDP(lAddr string, rAddr string) (chan SipMessage, chan SipMessage) {
 
 func sendUDP(connection *net.UDPConn, outbound chan SipMessage, remotePeer *net.UDPAddr) {
 	for packet := range outbound {
-		_, err := connection.WriteToUDP(SerializeSipMessage(packet), remotePeer)
+		_, err := connection.WriteToUDP(packet.Serialize(), remotePeer)
 		if err != nil {
 			log.Println("Error on write: ", err)
 			continue
@@ -61,10 +61,10 @@ func recvUDP(connection *net.UDPConn, inbound chan SipMessage) {
 			log.Println("Error on read: ", err)
 			continue
 		}
-		firstLine, sipHeaders, sipMessageBody, err := DeserializeSipMessage(b, false)
+		sipMessage, err := DeserializeSipMessage(b, false)
 		if err != nil {
 			log.Println(err)
 		}
-		inbound <- SipMessage{FirstLine: firstLine, Headers: sipHeaders, Body: sipMessageBody}
+		inbound <- sipMessage
 	}
 }

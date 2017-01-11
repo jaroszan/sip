@@ -1,4 +1,4 @@
-// Copyright 2015 sip authors. All rights reserved.
+// Copyright 2016 sip authors. All rights reserved.
 // Use of this source code is governed by a MIT-style license that can be
 // found in the LICENSE file.
 
@@ -42,7 +42,7 @@ func StartTCPClient(lAddr string, rAddr string) (chan SipMessage, chan SipMessag
 
 func sendTCP(connection *net.TCPConn, outbound chan SipMessage) {
 	for message := range outbound {
-		_, err := connection.Write(SerializeSipMessage(message))
+		_, err := connection.Write(message.Serialize())
 		if err != nil {
 			log.Println("Error on write: ", err)
 			continue
@@ -64,8 +64,8 @@ func recvTCP(connection *net.TCPConn, inbound chan SipMessage) {
 				break
 			}
 		}
-		firstLine, sipHeaders, _, _ := DeserializeSipMessage(buffer.Bytes(), true)
-		contentLength, err := strconv.Atoi(sipHeaders["content-length"])
+		sipMessage, _ := DeserializeSipMessage(buffer.Bytes(), true)
+		contentLength, err := strconv.Atoi(sipMessage.GetHeaders()["content-length"])
 		if err != nil {
 			log.Println("Content-Length value cannot be converted to number, setting it to 0")
 			contentLength = 0
@@ -81,7 +81,8 @@ func recvTCP(connection *net.TCPConn, inbound chan SipMessage) {
 			if err != nil {
 				log.Println(err)
 			}
+			sipMessage.SetBody(string(sipMessageBody))
 		}
-		inbound <- SipMessage{FirstLine: firstLine, Headers: sipHeaders, Body: string(sipMessageBody)}
+		inbound <- sipMessage
 	}
 }
