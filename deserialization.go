@@ -5,7 +5,6 @@
 package sip
 
 import (
-	"bytes"
 	"strings"
 	"strconv"
 )
