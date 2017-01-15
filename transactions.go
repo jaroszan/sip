@@ -9,13 +9,17 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"strconv"
 )
+
+const timerAInitialValue = 500
+const timerATimeout = 32000
 
 type InviteClientState uint8
 
 //FSM states for Invite Client Transactions
 const (
-	InviteClientCalling InviteClientState = iota
+	InviteClientCalling InviteClientState = iota + 1
 	InviteClientProceeding
 	InviteClientCompleted
 	InviteClientTerminated
@@ -29,14 +33,38 @@ type ClientTransaction struct {
 	//transport      string
 }
 
-var activeTransactions map[string]ClientTransaction
+//type transactionList map[string]ClientTransaction
 
-//Create mutex to protect activeTransactions
-var mx = &sync.RWMutex{}
+type ActiveClientTransactions struct {
+	mtx sync.Mutex
+	trm map[string]ClientTransaction
+}
 
-func init() {
-	// data structure for holding active transactions with branch parameter as the map key
-	activeTransactions = make(map[string]ClientTransaction)
+func (act *ActiveClientTransactions) NewTransaction(id string, outgoingMessage SipMessage) {
+	act.mtx.Lock()
+	act.trm[id] = ClientTransaction{currentState: InviteClientCalling, initialRequest: outgoingMessage}
+	act.mtx.Unlock()
+}
+
+func (act *ActiveClientTransactions) DeleteTransaction(id string) {
+	act.mtx.Lock()
+	delete(act.trm, id)
+	act.mtx.Unlock()
+}
+
+func (act *ActiveClientTransactions) GetState(id string) InviteClientState {
+	act.mtx.Lock()
+	state := act.trm[id].currentState
+	act.mtx.Unlock()
+	return state
+}
+
+func (act *ActiveClientTransactions) UpdateState(id string, newState InviteClientState) {
+	act.mtx.Lock()
+	tmp := act.trm[id]
+	tmp.currentState = newState
+	act.trm[id] = tmp
+	act.mtx.Unlock()
 }
 
 func getViaBranchValue(viaHeader string) string {
@@ -52,17 +80,19 @@ func getViaBranchValue(viaHeader string) string {
 	return transactionID
 }
 
-func retransmitFunction(outbound chan SipMessage, sipMessage SipMessage, transactionID string) {
+func retransmitFunction(outbound chan SipMessage, sipMessage SipMessage, transactionID string, Act *ActiveClientTransactions) {
 	if sipMessage.GetHeaders()["Cseq"] != "1 ACK" {
+		transactionTimer := time.Duration(timerAInitialValue)
+		timerATransactionTimeout := time.Duration(timerATimeout)
 		for {
-			time.Sleep(time.Second * 2)
-			mx.RLock()
-			currentTransactionState := activeTransactions[transactionID].currentState
-			mx.RUnlock()
-			if currentTransactionState == InviteClientCalling {
-				log.Println("Retransmitting")
-				log.Println(sipMessage.GetHeaders())
+			time.Sleep(time.Millisecond * transactionTimer)
+			if Act.GetState(transactionID) == InviteClientCalling {
 				outbound <- sipMessage
+				transactionTimer = transactionTimer * 2
+				if transactionTimer >= timerATransactionTimeout {
+					log.Println("REQUEST TIMEOUT")
+					return
+				}
 			} else {
 				return
 			}
@@ -71,36 +101,42 @@ func retransmitFunction(outbound chan SipMessage, sipMessage SipMessage, transac
 	return
 }
 
-func OutgoingTransactionLayerHandler(outboundTransactions chan SipMessage, outbound chan SipMessage) {
-	for outgoingMessage := range outboundTransactions {
-		transactionID := getViaBranchValue(outgoingMessage.GetHeaders()["Via"])
-		mx.Lock()
-		activeTransactions[transactionID] = ClientTransaction{currentState: InviteClientCalling, initialRequest: outgoingMessage}
-		mx.Unlock()
-		outbound <- outgoingMessage
-		go retransmitFunction(outbound, outgoingMessage, transactionID)
+func TransactionLayerHandler(outboundT chan SipMessage, outbound chan SipMessage, inboundT chan SipMessage, inbound chan SipMessage) {
+	trl := make(map[string]ClientTransaction)	
+	// data structure for holding active transactions with branch parameter as the map key
+	Act := &ActiveClientTransactions{trm: trl}
+	for {
+		select {
+		case outgoingMessage := <- outboundT:
+			transactionID := getViaBranchValue(outgoingMessage.GetHeaders()["Via"])
+			Act.NewTransaction(transactionID, outgoingMessage)
+			outbound <- outgoingMessage
+			go retransmitFunction(outbound, outgoingMessage, transactionID, Act)
+		case incomingMessage := <- inbound:
+			transactionID := getViaBranchValue(incomingMessage.GetHeaders()["via"])
+			if incomingMessage.Type() == TypeResponse {
+				//transactionState := Act.GetState(transactionID)
+				statusCode := getStatusCode(incomingMessage.GetFirstLine())
+				if statusCode >= 100 && statusCode < 200 {
+					Act.UpdateState(transactionID, InviteClientProceeding)
+				} else if statusCode >= 200 && statusCode < 300 {
+					Act.UpdateState(transactionID, InviteClientTerminated)
+				} else {
+					Act.UpdateState(transactionID, InviteClientTerminated)
+				}
+				inboundT <- incomingMessage
+				if Act.GetState(transactionID) == InviteClientTerminated {
+					Act.DeleteTransaction(transactionID)
+				}
+			} else {
+				//TODO handle incoming transactions
+			}
+		}
 	}
 }
 
-func IncomingTransactionLayerHandler(inboundTransactions chan SipMessage, inbound chan SipMessage) {
-	for incomingMessage := range inbound {
-		transactionID := getViaBranchValue(incomingMessage.GetHeaders()["via"])
-		mx.RLock()
-		myTmp := activeTransactions
-		mx.RUnlock()
-		if _, ok := myTmp[transactionID]; ok {
-			if incomingMessage.Type() == TypeRequest {
-				//TODO request processing
-			} else {
-				mx.Lock()
-				tmp := activeTransactions[transactionID]
-				tmp.currentState = InviteClientProceeding
-				activeTransactions[transactionID] = tmp
-				mx.Unlock()
-				inboundTransactions <- incomingMessage
-			}
-		} else {
-			//TODO new transaction handling
-		}
-	}
+func getStatusCode(firstLine string) int {
+	firstLineFields := strings.Fields(firstLine)	
+	statusCode, _ := strconv.Atoi(firstLineFields[1])
+	return statusCode
 }
